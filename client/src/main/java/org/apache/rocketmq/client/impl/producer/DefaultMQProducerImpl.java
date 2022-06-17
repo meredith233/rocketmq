@@ -117,7 +117,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         this(defaultMQProducer, null);
     }
 
-    public DefaultMQProducerImpl(final DefaultMQProducer defaultMQProducer, RPCHook rpcHook) {
+    public  DefaultMQProducerImpl(final DefaultMQProducer defaultMQProducer, RPCHook rpcHook) {
         this.defaultMQProducer = defaultMQProducer;
         this.rpcHook = rpcHook;
 

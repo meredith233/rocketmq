@@ -228,6 +228,7 @@ public class DefaultRequestProcessor extends AsyncNettyRequestProcessor implemen
             registerBrokerBody.getTopicConfigSerializeWrapper().getDataVersion().setTimestamp(0);
         }
 
+        // 将broker信息注册到RouteInfoManager
         RegisterBrokerResult result = this.namesrvController.getRouteInfoManager().registerBroker(
             requestHeader.getClusterName(),
             requestHeader.getBrokerAddr(),
@@ -352,6 +353,7 @@ public class DefaultRequestProcessor extends AsyncNettyRequestProcessor implemen
         final GetRouteInfoRequestHeader requestHeader =
             (GetRouteInfoRequestHeader) request.decodeCommandCustomHeader(GetRouteInfoRequestHeader.class);
 
+        // 根据topic 获取 QueueDataList， 根据其中的brokerName获取BrokerData
         TopicRouteData topicRouteData = this.namesrvController.getRouteInfoManager().pickupTopicRouteData(requestHeader.getTopic());
 
         if (topicRouteData != null) {
