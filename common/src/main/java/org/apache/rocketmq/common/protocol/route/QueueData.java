@@ -24,6 +24,14 @@ public class QueueData implements Comparable<QueueData> {
     private String brokerName;
     private int readQueueNums;
     private int writeQueueNums;
+
+    /**
+     * 可选值为 0 , 2, 4, 6
+     * 0为不可读写 000
+     * 2为可写    010
+     * 4为可读    001
+     * 6为可读写   011
+     */
     private int perm;
     private int topicSysFlag;
 
