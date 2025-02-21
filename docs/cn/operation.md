@@ -6,7 +6,7 @@
 
 #### 1.1 单Master模式
 
-这种方式风险较大，一旦Broker重启或者宕机时，会导致整个服务不可用。不建议线上环境使用,可以用于本地测试。
+这种方式风险较大，一旦Broker重启或者宕机时，会导致整个服务不可用。不建议线上环境使用，可以用于本地测试。
 
 ##### 1）启动 NameServer
 
@@ -569,9 +569,9 @@ RocketMQ 5.0 开始支持自动主从切换的模式，可参考以下文档
   <td class=xl68 width=87 style='width:65pt'>NameServer 服务地址，格式 ip:port</td>
  </tr>
  <tr height=57 style='height:43.0pt'>
-  <td rowspan=1 height=137 class=xl69 width=191 style='border-bottom:1.0pt;
+  <td rowspan=3 height=137 class=xl69 width=191 style='border-bottom:1.0pt;
   height:103.0pt;border-top:none;width:143pt'>wipeWritePerm</td>
-  <td rowspan=1 class=xl72 width=87 style='border-bottom:1.0pt
+  <td rowspan=3 class=xl72 width=87 style='border-bottom:1.0pt
   border-top:none;width:65pt'>从NameServer上清除 Broker写权限</td>
   <td class=xl67 width=87 style='width:65pt'>-b</td>
   <td class=xl68 width=87 style='width:65pt'>BrokerName</td>
@@ -1396,13 +1396,13 @@ RocketMQ 5.0 开始支持自动主从切换的模式，可参考以下文档
 
 解决方案：rocketmq默认策略是从消息队列尾部，即跳过历史消息。如果想消费历史消息，则需要设置：`org.apache.rocketmq.client.consumer.DefaultMQPushConsumer#setConsumeFromWhere`。常用的有以下三种配置：
 
-- 默认配置,一个新的订阅组第一次启动从队列的最后位置开始消费，后续再启动接着上次消费的进度开始消费,即跳过历史消息；
+- 默认配置，一个新的订阅组第一次启动从队列的最后位置开始消费，后续再启动接着上次消费的进度开始消费，即跳过历史消息；
 
 ```java
 consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_LAST_OFFSET);
 ```
 
-- 一个新的订阅组第一次启动从队列的最前位置开始消费，后续再启动接着上次消费的进度开始消费,即消费Broker未过期的历史消息；
+- 一个新的订阅组第一次启动从队列的最前位置开始消费，后续再启动接着上次消费的进度开始消费，即消费Broker未过期的历史消息；
 
 ```java
 consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);

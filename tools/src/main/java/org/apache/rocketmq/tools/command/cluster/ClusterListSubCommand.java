@@ -20,15 +20,14 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.rocketmq.common.protocol.body.ClusterInfo;
-import org.apache.rocketmq.common.protocol.body.KVTable;
-import org.apache.rocketmq.common.protocol.route.BrokerData;
 import org.apache.rocketmq.remoting.RPCHook;
+import org.apache.rocketmq.remoting.protocol.body.ClusterInfo;
+import org.apache.rocketmq.remoting.protocol.body.KVTable;
+import org.apache.rocketmq.remoting.protocol.route.BrokerData;
 import org.apache.rocketmq.tools.admin.DefaultMQAdminExt;
 import org.apache.rocketmq.tools.command.SubCommand;
 import org.apache.rocketmq.tools.command.SubCommandException;
@@ -42,7 +41,7 @@ public class ClusterListSubCommand implements SubCommand {
 
     @Override
     public String commandDesc() {
-        return "List cluster infos";
+        return "List cluster infos.";
     }
 
     @Override
@@ -109,7 +108,7 @@ public class ClusterListSubCommand implements SubCommand {
         if (StringUtils.isEmpty(clusterName)) {
             return clusterInfo.getClusterAddrTable().keySet();
         } else {
-            Set<String> clusterNames = new TreeSet<String>();
+            Set<String> clusterNames = new TreeSet<>();
             clusterNames.add(clusterName);
             return clusterNames;
         }
@@ -128,7 +127,7 @@ public class ClusterListSubCommand implements SubCommand {
         );
 
         for (String clusterName : clusterNames) {
-            TreeSet<String> brokerNameTreeSet = new TreeSet<String>();
+            TreeSet<String> brokerNameTreeSet = new TreeSet<>();
             Set<String> brokerNameSet = clusterInfo.getClusterAddrTable().get(clusterName);
             if (brokerNameSet != null && !brokerNameSet.isEmpty()) {
                 brokerNameTreeSet.addAll(brokerNameSet);
@@ -196,7 +195,7 @@ public class ClusterListSubCommand implements SubCommand {
         );
 
         for (String clusterName : clusterNames) {
-            TreeSet<String> brokerNameTreeSet = new TreeSet<String>();
+            TreeSet<String> brokerNameTreeSet = new TreeSet<>();
             Set<String> brokerNameSet = clusterInfo.getClusterAddrTable().get(clusterName);
             if (brokerNameSet != null && !brokerNameSet.isEmpty()) {
                 brokerNameTreeSet.addAll(brokerNameSet);
@@ -228,7 +227,7 @@ public class ClusterListSubCommand implements SubCommand {
                             KVTable kvTable = defaultMQAdminExt.fetchBrokerRuntimeStats(next1.getValue());
                             isBrokerActive = Boolean.parseBoolean(kvTable.getTable().get("brokerActive"));
                             String putTps = kvTable.getTable().get("putTps");
-                            String getTransferedTps = kvTable.getTable().get("getTransferedTps");
+                            String getTransferredTps = kvTable.getTable().get("getTransferredTps");
                             sendThreadPoolQueueSize = kvTable.getTable().get("sendThreadPoolQueueSize");
                             pullThreadPoolQueueSize = kvTable.getTable().get("pullThreadPoolQueueSize");
 
@@ -251,15 +250,16 @@ public class ClusterListSubCommand implements SubCommand {
                             }
 
                             version = kvTable.getTable().get("brokerVersionDesc");
-                            {
+
+                            if (StringUtils.isNotBlank(putTps)) {
                                 String[] tpss = putTps.split(" ");
                                 if (tpss.length > 0) {
                                     in = Double.parseDouble(tpss[0]);
                                 }
                             }
 
-                            {
-                                String[] tpss = getTransferedTps.split(" ");
+                            if (StringUtils.isNotBlank(getTransferredTps)) {
+                                String[] tpss = getTransferredTps.split(" ");
                                 if (tpss.length > 0) {
                                     out = Double.parseDouble(tpss[0]);
                                 }
