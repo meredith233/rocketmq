@@ -25,7 +25,7 @@ import org.apache.rocketmq.client.trace.TraceBean;
 import org.apache.rocketmq.client.trace.TraceContext;
 import org.apache.rocketmq.client.trace.TraceDispatcher;
 import org.apache.rocketmq.client.trace.TraceType;
-import org.apache.rocketmq.common.protocol.NamespaceUtil;
+import org.apache.rocketmq.remoting.protocol.NamespaceUtil;
 
 public class SendMessageTraceHookImpl implements SendMessageHook {
 
@@ -48,7 +48,7 @@ public class SendMessageTraceHookImpl implements SendMessageHook {
         }
         //build the context content of TraceContext
         TraceContext traceContext = new TraceContext();
-        traceContext.setTraceBeans(new ArrayList<TraceBean>(1));
+        traceContext.setTraceBeans(new ArrayList<>(1));
         context.setMqTraceContext(traceContext);
         traceContext.setTraceType(TraceType.Pub);
         traceContext.setGroupName(NamespaceUtil.withoutNamespace(context.getProducerGroup()));
@@ -58,7 +58,8 @@ public class SendMessageTraceHookImpl implements SendMessageHook {
         traceBean.setTags(context.getMessage().getTags());
         traceBean.setKeys(context.getMessage().getKeys());
         traceBean.setStoreHost(context.getBrokerAddr());
-        traceBean.setBodyLength(context.getMessage().getBody().length);
+        int bodyLength = null == context.getMessage().getBody() ? 0 : context.getMessage().getBody().length;
+        traceBean.setBodyLength(bodyLength);
         traceBean.setMsgType(context.getMsgType());
         traceContext.getTraceBeans().add(traceBean);
     }
