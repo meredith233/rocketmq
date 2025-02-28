@@ -19,6 +19,8 @@ package org.apache.rocketmq.proxy.common;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.rocketmq.common.consumer.ReceiptHandle;
 
 public class MessageReceiptHandle {
     private final String group;
@@ -26,25 +28,27 @@ public class MessageReceiptHandle {
     private final int queueId;
     private final String messageId;
     private final long queueOffset;
-    private final String originalReceiptHandle;
-    private final long timestamp;
+    private final String originalReceiptHandleStr;
+    private final ReceiptHandle originalReceiptHandle;
     private final int reconsumeTimes;
-    private final long expectInvisibleTime;
 
-    private String receiptHandle;
+    private final AtomicInteger renewRetryTimes = new AtomicInteger(0);
+    private final AtomicInteger renewTimes = new AtomicInteger(0);
+    private final long consumeTimestamp;
+    private volatile String receiptHandleStr;
 
-    public MessageReceiptHandle(String group, String topic, int queueId, String receiptHandle, String messageId,
-        long queueOffset, int reconsumeTimes, long expectInvisibleTime) {
+    public MessageReceiptHandle(String group, String topic, int queueId, String receiptHandleStr, String messageId,
+        long queueOffset, int reconsumeTimes) {
+        this.originalReceiptHandle = ReceiptHandle.decode(receiptHandleStr);
         this.group = group;
         this.topic = topic;
         this.queueId = queueId;
-        this.receiptHandle = receiptHandle;
-        this.originalReceiptHandle = receiptHandle;
+        this.receiptHandleStr = receiptHandleStr;
+        this.originalReceiptHandleStr = receiptHandleStr;
         this.messageId = messageId;
         this.queueOffset = queueOffset;
         this.reconsumeTimes = reconsumeTimes;
-        this.expectInvisibleTime = expectInvisibleTime;
-        this.timestamp = System.currentTimeMillis();
+        this.consumeTimestamp = originalReceiptHandle.getRetrieveTime();
     }
 
     @Override
@@ -56,17 +60,17 @@ public class MessageReceiptHandle {
             return false;
         }
         MessageReceiptHandle handle = (MessageReceiptHandle) o;
-        return queueId == handle.queueId && queueOffset == handle.queueOffset && timestamp == handle.timestamp
-            && reconsumeTimes == handle.reconsumeTimes && expectInvisibleTime == handle.expectInvisibleTime
+        return queueId == handle.queueId && queueOffset == handle.queueOffset && consumeTimestamp == handle.consumeTimestamp
+            && reconsumeTimes == handle.reconsumeTimes
             && Objects.equal(group, handle.group) && Objects.equal(topic, handle.topic)
-            && Objects.equal(messageId, handle.messageId) && Objects.equal(originalReceiptHandle, handle.originalReceiptHandle)
-            && Objects.equal(receiptHandle, handle.receiptHandle);
+            && Objects.equal(messageId, handle.messageId) && Objects.equal(originalReceiptHandleStr, handle.originalReceiptHandleStr)
+            && Objects.equal(receiptHandleStr, handle.receiptHandleStr);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(group, topic, queueId, messageId, queueOffset, originalReceiptHandle, timestamp,
-            reconsumeTimes, expectInvisibleTime, receiptHandle);
+        return Objects.hashCode(group, topic, queueId, messageId, queueOffset, originalReceiptHandleStr, consumeTimestamp,
+            reconsumeTimes, receiptHandleStr);
     }
 
     @Override
@@ -77,11 +81,11 @@ public class MessageReceiptHandle {
             .add("queueId", queueId)
             .add("messageId", messageId)
             .add("queueOffset", queueOffset)
-            .add("originalReceiptHandle", originalReceiptHandle)
-            .add("timestamp", timestamp)
+            .add("originalReceiptHandleStr", originalReceiptHandleStr)
             .add("reconsumeTimes", reconsumeTimes)
-            .add("expectInvisibleTime", expectInvisibleTime)
-            .add("receiptHandle", receiptHandle)
+            .add("renewRetryTimes", renewRetryTimes)
+            .add("firstConsumeTimestamp", consumeTimestamp)
+            .add("receiptHandleStr", receiptHandleStr)
             .toString();
     }
 
@@ -97,12 +101,12 @@ public class MessageReceiptHandle {
         return queueId;
     }
 
-    public String getReceiptHandle() {
-        return receiptHandle;
+    public String getReceiptHandleStr() {
+        return receiptHandleStr;
     }
 
-    public String getOriginalReceiptHandle() {
-        return originalReceiptHandle;
+    public String getOriginalReceiptHandleStr() {
+        return originalReceiptHandleStr;
     }
 
     public String getMessageId() {
@@ -117,15 +121,35 @@ public class MessageReceiptHandle {
         return reconsumeTimes;
     }
 
-    public long getTimestamp() {
-        return timestamp;
+    public long getConsumeTimestamp() {
+        return consumeTimestamp;
     }
 
-    public long getExpectInvisibleTime() {
-        return expectInvisibleTime;
+    public void updateReceiptHandle(String receiptHandleStr) {
+        this.receiptHandleStr = receiptHandleStr;
     }
 
-    public void update(String receiptHandle) {
-        this.receiptHandle = receiptHandle;
+    public int incrementAndGetRenewRetryTimes() {
+        return this.renewRetryTimes.incrementAndGet();
+    }
+
+    public int incrementRenewTimes() {
+        return this.renewTimes.incrementAndGet();
+    }
+
+    public int getRenewTimes() {
+        return this.renewTimes.get();
+    }
+
+    public void resetRenewRetryTimes() {
+        this.renewRetryTimes.set(0);
+    }
+
+    public int getRenewRetryTimes() {
+        return this.renewRetryTimes.get();
+    }
+
+    public ReceiptHandle getOriginalReceiptHandle() {
+        return originalReceiptHandle;
     }
 }

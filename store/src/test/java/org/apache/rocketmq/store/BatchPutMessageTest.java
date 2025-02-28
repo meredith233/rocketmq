@@ -17,6 +17,15 @@
 
 package org.apache.rocketmq.store;
 
+import java.io.File;
+import java.net.InetSocketAddress;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.apache.rocketmq.common.BrokerConfig;
 import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.message.Message;
@@ -30,25 +39,16 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.File;
-import java.net.InetSocketAddress;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.apache.rocketmq.common.message.MessageDecoder.messageProperties2String;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.junit.Assert.assertTrue;
 
 public class BatchPutMessageTest {
 
     private MessageStore messageStore;
 
-    public static final char NAME_VALUE_SEPARATOR = 1;
-    public static final char PROPERTY_SEPARATOR = 2;
     public final static Charset CHARSET_UTF8 = StandardCharsets.UTF_8;
 
     @Before
@@ -60,11 +60,11 @@ public class BatchPutMessageTest {
     }
 
     @After
-    public void destory() {
+    public void destroy() {
         messageStore.shutdown();
         messageStore.destroy();
 
-        UtilAll.deleteFile(new File(System.getProperty("user.home") + File.separator + "putmessagesteststore"));
+        UtilAll.deleteFile(new File(System.getProperty("java.io.tmpdir") + File.separator + "putmessagesteststore"));
     }
 
     private MessageStore buildMessageStore() throws Exception {
@@ -75,9 +75,11 @@ public class BatchPutMessageTest {
         messageStoreConfig.setMaxIndexNum(100 * 10);
         messageStoreConfig.setFlushDiskType(FlushDiskType.SYNC_FLUSH);
         messageStoreConfig.setFlushIntervalConsumeQueue(1);
-        messageStoreConfig.setStorePathRootDir(System.getProperty("user.home") + File.separator + "putmessagesteststore");
-        messageStoreConfig.setStorePathCommitLog(System.getProperty("user.home") + File.separator + "putmessagesteststore" + File.separator + "commitlog");
-        return new DefaultMessageStore(messageStoreConfig, new BrokerStatsManager("simpleTest", true), new MyMessageArrivingListener(), new BrokerConfig());
+        messageStoreConfig.setStorePathRootDir(System.getProperty("java.io.tmpdir") + File.separator + "putmessagesteststore");
+        messageStoreConfig.setStorePathCommitLog(System.getProperty("java.io.tmpdir") + File.separator
+            + "putmessagesteststore" + File.separator + "commitlog");
+        messageStoreConfig.setHaListenPort(0);
+        return new DefaultMessageStore(messageStoreConfig, new BrokerStatsManager("simpleTest", true), new MyMessageArrivingListener(), new BrokerConfig(), new ConcurrentHashMap<>());
     }
 
     @Test
@@ -106,7 +108,7 @@ public class BatchPutMessageTest {
             short propertiesLength = (short) propertiesBytes.length;
             final byte[] topicData = msg.getTopic().getBytes(MessageDecoder.CHARSET_UTF8);
             final int topicLength = topicData.length;
-            msgLengthArr[j] = calMsgLength(msg.getBody().length, topicLength, propertiesLength + batchPropLen + 1) + msgLengthArr[j - 1];
+            msgLengthArr[j] = calMsgLength(msg.getBody().length, topicLength, propertiesLength + batchPropLen) + msgLengthArr[j - 1];
             j++;
         }
         byte[] batchMessageBody = MessageDecoder.encodeMessages(messages);
@@ -122,15 +124,22 @@ public class BatchPutMessageTest {
         PutMessageResult putMessageResult = messageStore.putMessages(messageExtBatch);
         assertThat(putMessageResult.isOk()).isTrue();
 
-        Thread.sleep(3 * 1000);
-
         for (long i = 0; i < 10; i++) {
-            MessageExt messageExt = messageStore.lookMessageByOffset(msgLengthArr[(int) i]);
-            assertThat(messageExt).isNotNull();
-            GetMessageResult result = messageStore.getMessage("batch_write_group", topic, queue, i, 1024 * 1024, null);
-            assertThat(result).isNotNull();
-            assertThat(result.getStatus()).isEqualTo(GetMessageStatus.FOUND);
-            result.release();
+            final long index = i;
+            Boolean exist = await().atMost(3, SECONDS).until(() -> {
+                MessageExt messageExt = messageStore.lookMessageByOffset(msgLengthArr[(int) index]);
+                if (messageExt == null) {
+                    return false;
+                }
+                GetMessageResult result = messageStore.getMessage("batch_write_group", topic, queue, index, 1024 * 1024, null);
+                if (result == null) {
+                    return false;
+                }
+                boolean equals = GetMessageStatus.FOUND.equals(result.getStatus());
+                result.release();
+                return equals;
+            }, item -> item);
+            assertTrue(exist);
         }
 
     }
@@ -174,18 +183,26 @@ public class BatchPutMessageTest {
         PutMessageResult putMessageResult = messageStore.putMessages(messageExtBatch);
         assertThat(putMessageResult.isOk()).isTrue();
 
-        Thread.sleep(3 * 1000);
-
         for (long i = 0; i < 10; i++) {
-            MessageExt messageExt = messageStore.lookMessageByOffset(msgLengthArr[(int) i]);
-            assertThat(messageExt).isNotNull();
-            GetMessageResult result = messageStore.getMessage("batch_write_group", topic, queue, i, 1024 * 1024, null);
-            assertThat(result).isNotNull();
-            assertThat(result.getStatus()).isEqualTo(GetMessageStatus.FOUND);
-            result.release();
+            final long index = i;
+            Boolean exist = await().atMost(3, SECONDS).until(() -> {
+                MessageExt messageExt = messageStore.lookMessageByOffset(msgLengthArr[(int) index]);
+                if (messageExt == null) {
+                    return false;
+                }
+                GetMessageResult result = messageStore.getMessage("batch_write_group", topic, queue, index, 1024 * 1024, null);
+                if (result == null) {
+                    return false;
+                }
+                boolean equals = GetMessageStatus.FOUND.equals(result.getStatus());
+                result.release();
+                return equals;
+            }, item -> item);
+            assertTrue(exist);
         }
 
     }
+
     private String generateKey(StringBuilder keyBuilder, MessageExt messageExt) {
         keyBuilder.setLength(0);
         keyBuilder.append(messageExt.getTopic());
