@@ -33,22 +33,27 @@ import apache.rocketmq.v2.SubscriptionEntry;
 import apache.rocketmq.v2.TelemetryCommand;
 import apache.rocketmq.v2.ThreadStackTrace;
 import apache.rocketmq.v2.VerifyMessageResult;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import org.apache.rocketmq.broker.client.ClientChannelInfo;
-import org.apache.rocketmq.common.protocol.ResponseCode;
-import org.apache.rocketmq.common.protocol.body.CMResult;
-import org.apache.rocketmq.common.protocol.body.ConsumeMessageDirectlyResult;
-import org.apache.rocketmq.common.protocol.body.ConsumerRunningInfo;
-import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
+import org.apache.rocketmq.common.attribute.TopicMessageType;
 import org.apache.rocketmq.proxy.common.ProxyContext;
 import org.apache.rocketmq.proxy.grpc.v2.BaseActivityTest;
+import org.apache.rocketmq.proxy.grpc.v2.ContextStreamObserver;
 import org.apache.rocketmq.proxy.grpc.v2.channel.GrpcChannelManager;
 import org.apache.rocketmq.proxy.grpc.v2.channel.GrpcClientChannel;
 import org.apache.rocketmq.proxy.grpc.v2.common.ResponseBuilder;
 import org.apache.rocketmq.proxy.service.relay.ProxyRelayResult;
 import org.apache.rocketmq.remoting.protocol.LanguageCode;
+import org.apache.rocketmq.remoting.protocol.ResponseCode;
+import org.apache.rocketmq.remoting.protocol.body.CMResult;
+import org.apache.rocketmq.remoting.protocol.body.ConsumeMessageDirectlyResult;
+import org.apache.rocketmq.remoting.protocol.body.ConsumerRunningInfo;
+import org.apache.rocketmq.remoting.protocol.heartbeat.SubscriptionData;
 import org.assertj.core.util.Lists;
 import org.junit.Before;
 import org.junit.Test;
@@ -61,6 +66,7 @@ import org.mockito.junit.MockitoJUnitRunner;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -129,6 +135,8 @@ public class ClientActivityTest extends BaseActivityTest {
             txProducerTopicArgumentCaptor.capture()
         );
 
+        when(this.metadataService.getTopicMessageType(any(), anyString())).thenReturn(TopicMessageType.TRANSACTION);
+
         HeartbeatResponse response = this.sendProducerHeartbeat(context);
 
         assertEquals(Code.OK, response.getStatus().getCode());
@@ -147,6 +155,7 @@ public class ClientActivityTest extends BaseActivityTest {
             Settings.newBuilder()
                 .setClientType(ClientType.PUSH_CONSUMER)
                 .setSubscription(Subscription.newBuilder()
+                    .setGroup(Resource.newBuilder().setName("Group").build())
                     .addSubscriptions(SubscriptionEntry.newBuilder()
                         .setExpression(FilterExpression.newBuilder()
                             .setExpression("tag")
@@ -200,7 +209,6 @@ public class ClientActivityTest extends BaseActivityTest {
         GrpcClientChannel channel = (GrpcClientChannel) clientChannelInfo.getChannel();
         assertEquals(REMOTE_ADDR, channel.getRemoteAddress());
         assertEquals(LOCAL_ADDR, channel.getLocalAddress());
-        assertEquals(group, channel.getGroup());
     }
 
     @Test
@@ -215,6 +223,7 @@ public class ClientActivityTest extends BaseActivityTest {
             .build());
         ArgumentCaptor<ClientChannelInfo> channelInfoArgumentCaptor = ArgumentCaptor.forClass(ClientChannelInfo.class);
         doNothing().when(this.messagingProcessor).unRegisterProducer(any(), anyString(), channelInfoArgumentCaptor.capture());
+        when(this.metadataService.getTopicMessageType(any(), anyString())).thenReturn(TopicMessageType.NORMAL);
 
         this.sendProducerTelemetry(context);
         this.sendProducerHeartbeat(context);
@@ -256,13 +265,84 @@ public class ClientActivityTest extends BaseActivityTest {
     }
 
     @Test
+    public void testErrorConsumerGroupName() throws Throwable {
+        ProxyContext context = createContext();
+        try {
+            this.sendClientTelemetry(
+                context,
+                Settings.newBuilder()
+                    .setClientType(ClientType.PUSH_CONSUMER)
+                    .setSubscription(Subscription.newBuilder()
+                        .addSubscriptions(SubscriptionEntry.newBuilder()
+                            .setExpression(FilterExpression.newBuilder()
+                                .setExpression("tag")
+                                .setType(FilterType.TAG)
+                                .build())
+                            .setTopic(Resource.newBuilder().setName(TOPIC).build())
+                            .build())
+                        .build())
+                    .build()).get();
+            fail();
+        } catch (ExecutionException e) {
+            StatusRuntimeException exception = (StatusRuntimeException) e.getCause();
+            assertEquals(Status.Code.INVALID_ARGUMENT, exception.getStatus().getCode());
+        }
+    }
+
+    @Test
+    public void testErrorProducerConfig() throws Throwable {
+        ProxyContext context = createContext();
+        try {
+            this.sendClientTelemetry(
+                context,
+                Settings.newBuilder()
+                    .setClientType(ClientType.PRODUCER)
+                    .setPublishing(Publishing.newBuilder()
+                        .addTopics(Resource.newBuilder().setName("()").build())
+                        .build())
+                    .build()).get();
+            fail();
+        } catch (ExecutionException e) {
+            StatusRuntimeException exception = (StatusRuntimeException) e.getCause();
+            assertEquals(Status.Code.INVALID_ARGUMENT, exception.getStatus().getCode());
+        }
+    }
+
+    @Test
+    public void testEmptySettings() throws Throwable {
+        ProxyContext context = createContext();
+        try {
+            this.sendClientTelemetry(
+                context,
+                Settings.getDefaultInstance()).get();
+            fail();
+        } catch (ExecutionException e) {
+            StatusRuntimeException exception = (StatusRuntimeException) e.getCause();
+            assertEquals(Status.Code.INVALID_ARGUMENT, exception.getStatus().getCode());
+        }
+    }
+
+    @Test
+    public void testEmptyProducerSettings() throws Throwable {
+        ProxyContext context = createContext();
+        TelemetryCommand command = this.sendClientTelemetry(
+            context,
+            Settings.newBuilder()
+                .setClientType(ClientType.PRODUCER)
+                .setPublishing(Publishing.getDefaultInstance())
+                .build()).get();
+        assertTrue(command.hasSettings());
+        assertTrue(command.getSettings().hasPublishing());
+    }
+
+    @Test
     public void testReportThreadStackTrace() {
         this.clientActivity = new ClientActivity(this.messagingProcessor, this.grpcClientSettingsManager, grpcChannelManagerMock);
         String jstack = "jstack";
         String nonce = "123";
         when(grpcChannelManagerMock.getAndRemoveResponseFuture(anyString())).thenReturn((CompletableFuture) runningInfoFutureMock);
         ProxyContext context = createContext();
-        StreamObserver<TelemetryCommand> streamObserver = clientActivity.telemetry(context, new StreamObserver<TelemetryCommand>() {
+        ContextStreamObserver<TelemetryCommand> streamObserver = clientActivity.telemetry(new StreamObserver<TelemetryCommand>() {
             @Override
             public void onNext(TelemetryCommand value) {
             }
@@ -275,7 +355,7 @@ public class ClientActivityTest extends BaseActivityTest {
             public void onCompleted() {
             }
         });
-        streamObserver.onNext(TelemetryCommand.newBuilder()
+        streamObserver.onNext(context, TelemetryCommand.newBuilder()
             .setThreadStackTrace(ThreadStackTrace.newBuilder()
                 .setThreadStackTrace(jstack)
                 .setNonce(nonce)
@@ -294,7 +374,7 @@ public class ClientActivityTest extends BaseActivityTest {
         String nonce = "123";
         when(grpcChannelManagerMock.getAndRemoveResponseFuture(anyString())).thenReturn((CompletableFuture) resultFutureMock);
         ProxyContext context = createContext();
-        StreamObserver<TelemetryCommand> streamObserver = clientActivity.telemetry(context, new StreamObserver<TelemetryCommand>() {
+        ContextStreamObserver<TelemetryCommand> streamObserver = clientActivity.telemetry(new StreamObserver<TelemetryCommand>() {
             @Override
             public void onNext(TelemetryCommand value) {
             }
@@ -307,7 +387,7 @@ public class ClientActivityTest extends BaseActivityTest {
             public void onCompleted() {
             }
         });
-        streamObserver.onNext(TelemetryCommand.newBuilder()
+        streamObserver.onNext(context, TelemetryCommand.newBuilder()
             .setVerifyMessageResult(VerifyMessageResult.newBuilder()
                 .setNonce(nonce)
                 .build())
@@ -331,7 +411,7 @@ public class ClientActivityTest extends BaseActivityTest {
 
             @Override
             public void onError(Throwable t) {
-
+                future.completeExceptionally(t);
             }
 
             @Override
@@ -339,11 +419,8 @@ public class ClientActivityTest extends BaseActivityTest {
 
             }
         };
-        StreamObserver<TelemetryCommand> requestObserver = this.clientActivity.telemetry(
-            ctx,
-            responseObserver
-        );
-        requestObserver.onNext(TelemetryCommand.newBuilder()
+        ContextStreamObserver<TelemetryCommand> requestObserver = this.clientActivity.telemetry(responseObserver);
+        requestObserver.onNext(ctx, TelemetryCommand.newBuilder()
             .setSettings(settings)
             .build());
         return future;

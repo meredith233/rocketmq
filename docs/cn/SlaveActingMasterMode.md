@@ -14,7 +14,7 @@
 - earliestMsgStoreTime 
 - endTransaction
 
-所有锁MQ相关操作，包括lock, unlock, lockBatch, unlockAll
+所有锁MQ相关操作，包括lock，unlock，lockBatch，unlockAll
 
 具体影响为：
 - 客户端无法获取位于该副本组的mq的锁，故当本地锁过期后，将无法消费该组的顺序消息 
@@ -31,7 +31,7 @@
 
 提出一个新的方案，Slave代理Master模式，作为Master-Slave部署模式的升级。在原先Master-Slave部署模式下，通过备代理主、轻量级心跳、副本组信息获取、broker预上线机制、二级消息逃逸等方式，当同组Master发生故障时，Slave将承担更加重要的作用，包括：
 
-- 当Master下线后，该组中brokerId最小的Slave会承担备读 以及 一些 客户端和管控会访问 但却只能在Master节点上完成的任务。包括且不限于searchOffset、maxOffset、minOffset、earliestMsgStoreTime、endTransaction以及所有锁MQ相关操作lock, unlock, lockBatch, unlockAll。
+- 当Master下线后，该组中brokerId最小的Slave会承担备读 以及 一些 客户端和管控会访问 但却只能在Master节点上完成的任务。包括且不限于searchOffset、maxOffset、minOffset、earliestMsgStoreTime、endTransaction以及所有锁MQ相关操作lock，unlock，lockBatch，unlockAll。
 - 当Master下线后，故障Broker组上的二级消息消费将不会中断，由该组中该组中brokerId最小的Slave承担起该任务，定时消息、Pop消息、事务消息等仍然可以正常运行。
 - 当Master下线后，在Slave代理Master一段时间主后，然后当Master再次上线后，通过预上线机制，Master会自动完成元数据的反向同步后再上线，不会出现元数据回退，造成消息大量重复消费或二级消息大量重放。
 
@@ -70,9 +70,9 @@ public void changeSpecialServiceStatus(boolean shouldStart) {
 
 2. Broker能及时感知到同组Broker的上下线情况。
 
-针对1，Nameserver原本就存在判活机制，定时会扫描不活跃的broker使其下线，而原本broker与nameserver的“心跳”则依赖于registerBroker操作，而这个操作涉及到topic信息上报，过于“重”，而且注册间隔过于长，因此需要一个轻量级的心跳机制，RoccketMQ 5.0在nameserver和broker间新增BrokerHeartbeat请求，broker会定时向nameserver发送心跳，若nameserver定时任务扫描发现超过心跳超时时间仍未收到该broker的心跳，将unregister该broker。registerBroker时会完成心跳超时时间的设置，并且注册时如果发现broker组内最小brokerId发生变化，将反向通知该组所有broker，并在路由获取时将最小brokerId的Slave路由替换使其充当只读模式的Master的角色
+针对1，Nameserver原本就存在判活机制，定时会扫描不活跃的broker使其下线，而原本broker与nameserver的“心跳”则依赖于registerBroker操作，而这个操作涉及到topic信息上报，过于“重”，而且注册间隔过于长，因此需要一个轻量级的心跳机制，RocketMQ 5.0在nameserver和broker间新增BrokerHeartbeat请求，broker会定时向nameserver发送心跳，若nameserver定时任务扫描发现超过心跳超时时间仍未收到该broker的心跳，将unregister该broker。registerBroker时会完成心跳超时时间的设置，并且注册时如果发现broker组内最小brokerId发生变化，将反向通知该组所有broker，并在路由获取时将最小brokerId的Slave路由替换使其充当只读模式的Master的角色
 
-针对2，通过两个机制来及时感知同组broker上下线情况，1是上文中介绍的当nameserver发现该broker组内最小brokerId发生变化，反向通知该组所有broker。2是broker自身会有定时任务，向nameserver同步本broker组存活broker的信息，RoccketMQ 5.0会新增GetBrokerMemberGroup请求来完成该工作。
+针对2，通过两个机制来及时感知同组broker上下线情况，1是上文中介绍的当nameserver发现该broker组内最小brokerId发生变化，反向通知该组所有broker。2是broker自身会有定时任务，向nameserver同步本broker组存活broker的信息，RocketMQ 5.0会新增GetBrokerMemberGroup请求来完成该工作。
 
 Slave Broker发现自己是该组中最小的brokerId，将会开启代理模式，而一旦Master Broker重新上线，Slave Broker同样会通过Nameserver反向通知或自身定时任务同步同组broker的信息感知到，并自动结束代理模式。
 
@@ -80,7 +80,7 @@ Slave Broker发现自己是该组中最小的brokerId，将会开启代理模式
 
 代理模式开启后，brokerId最小的Slave会承担起二级消息的扫描和重新投递功能。
 
-二级消息一般分为两个阶段，发送或者消费时会发送到一个特殊topic中，后台会有线程会扫描，最终的满足要求的消息会被重新投递到Commitlog中。我们可以让brokerId最小的Slave进行扫描，但如果扫描之后的消息重新投递到本Commitlog，那将会破坏Slave不可写的语义，造成Commitlog分叉。因此RoccketMQ 5.0提出一种逃逸机制，将重放的二级消息远程或本地投放到其他Master的Commitlog中。
+二级消息一般分为两个阶段，发送或者消费时会发送到一个特殊topic中，后台会有线程会扫描，最终的满足要求的消息会被重新投递到Commitlog中。我们可以让brokerId最小的Slave进行扫描，但如果扫描之后的消息重新投递到本Commitlog，那将会破坏Slave不可写的语义，造成Commitlog分叉。因此RocketMQ 5.0提出一种逃逸机制，将重放的二级消息远程或本地投放到其他Master的Commitlog中。
 
 - 远程逃逸
 
@@ -161,4 +161,4 @@ Broker
 客户端对新旧版本的nameserver和broker均无兼容性问题。
 
 
-参考文档: [原RIP](https://github.com/apache/rocketmq/wiki/RIP-32-Slave-Acting-Master-Mode)
+参考文档：[原RIP](https://github.com/apache/rocketmq/wiki/RIP-32-Slave-Acting-Master-Mode)
